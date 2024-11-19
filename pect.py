@@ -1,6 +1,5 @@
 """ PECT definition and methods module. """
 
-import os
 from pathlib import Path
 from utils import consecutive_groups, find_duplicate_indices
 
@@ -336,8 +335,21 @@ def evaluate(pect: Pectp, solution: Pects) -> tuple[int, int]:
 
     return distance_to_feasibility, soft_cost
 
+def write_solution(path: Path, solution: Pects) -> None:
+    """
+    Writes a solution to file
 
-def write_solution(path: Path, pect: Pectp, solution: Pects) -> None:
+    Args:
+        path: string to file path
+        solution: PECT solution
+    """
+
+    with open(path, "w", encoding="utf-8") as file:
+        for timeslot, room in solution:
+            file.write(f"{timeslot} {room}\n")
+
+
+def write_formatted_solution(path: Path, pect: Pectp, solution: Pects) -> None:
     """
     Writes a formatted solution to file
 
@@ -375,7 +387,6 @@ def write_solution(path: Path, pect: Pectp, solution: Pects) -> None:
                 for day in range(5):
                     file.write(timetable[room][slot][day].ljust(8))
                 file.write("\n")
-            file.write("\n")
 
 
 def write_evaluation(path: Path, evaluation: tuple[int, int]) -> None:
