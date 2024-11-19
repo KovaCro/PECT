@@ -98,10 +98,12 @@ def parse_solution(path: Path, pect: Pectp) -> Pects:
 
     n = pect[0]
     solution = []
+
     with open(path, "r", encoding="utf") as file:
         for _ in range(n):
             line = file.readline().split(" ")
             solution.append([int(line[0]), int(line[1])])
+
     return solution
 
 
@@ -120,6 +122,7 @@ def is_feasible(pect: Pectp, solution: Pects) -> bool:
     for s in solution:
         if s[0] == -1:
             return False
+
     return is_valid(pect, solution)
 
 
@@ -264,11 +267,13 @@ def make_valid(pect: Pectp, solution: Pects) -> Pects:
     """
 
     validation_fails = []
+
     if not is_valid(pect, solution, validation_fails):
         invalid_events = [fail["event"] for fail in validation_fails]
         for invalid_event in invalid_events:
             solution[invalid_event][0] = -1
             solution[invalid_event][1] = -1
+
     return solution
 
 
@@ -373,11 +378,13 @@ def write_formatted_solution(path: Path, pect: Pectp, solution: Pects) -> None:
     ) = pect
 
     timetable = [[["-" for _ in range(5)] for _ in range(9)] for _ in range(r)]
+
     for i, event in enumerate(solution):
         timeslot, room = event
         slot = timeslot % 9
         day = timeslot // 9
         timetable[room][slot][day] = str(i)
+
     with open(path, "w", encoding="utf-8") as file:
         for room in range(r):
             file.write(f"ucionica{room}\n")
