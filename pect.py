@@ -1,6 +1,7 @@
 """ PECT definition and methods module. """
 
 import os
+from pathlib import Path
 from utils import consecutive_groups, find_duplicate_indices
 
 
@@ -12,7 +13,7 @@ type Pectp = tuple[
 type Pects = list[list[int]]
 
 
-def parse_problem(path: str) -> Pectp:
+def parse_problem(path: Path) -> Pectp:
     """
     Parses a .tim file. Does not check if file is valid.
 
@@ -84,7 +85,7 @@ def parse_problem(path: str) -> Pectp:
         )
 
 
-def parse_solution(path: str, pect: Pectp) -> Pects:
+def parse_solution(path: Path, pect: Pectp) -> Pects:
     """
     Parses a .sln file. Does not check if file is valid.
 
@@ -336,7 +337,7 @@ def evaluate(pect: Pectp, solution: Pects) -> tuple[int, int]:
     return distance_to_feasibility, soft_cost
 
 
-def write_solution(path: str, pect: Pectp, solution: Pects) -> None:
+def write_solution(path: Path, pect: Pectp, solution: Pects) -> None:
     """
     Writes a formatted solution to file
 
@@ -360,7 +361,7 @@ def write_solution(path: str, pect: Pectp, solution: Pects) -> None:
     ) = pect
 
     timetable = [[["-" for _ in range(5)] for _ in range(9)] for _ in range(r)]
-    for i, event in solution:
+    for i, event in enumerate(solution):
         timeslot, room = event
         slot = timeslot % 9
         day = timeslot // 9
@@ -377,7 +378,7 @@ def write_solution(path: str, pect: Pectp, solution: Pects) -> None:
             file.write("\n")
 
 
-def write_evaluation(path: str, evaluation: tuple[int, int]) -> None:
+def write_evaluation(path: Path, evaluation: tuple[int, int]) -> None:
     """
     Writes a formatted evaluation to file
 
@@ -387,7 +388,7 @@ def write_evaluation(path: str, evaluation: tuple[int, int]) -> None:
     """
 
     with open(path, "w", encoding="utf-8") as file:
-        file.write(f"Instance: {os.path.split(path)[1]}\n")
+        file.write(f"Instance: {path.stem}\n")
         file.write(f"Distance to feasibility: {evaluation[0]}\n")
         file.write(f"Soft cost: {evaluation[1]}\n")
         file.write(f"Total: {evaluation[0] + evaluation[1]}\n")
