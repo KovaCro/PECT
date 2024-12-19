@@ -1,7 +1,7 @@
 """ 
-Greedy solver module (callable)
+Naive solver module (callable)
 
-Solves PECT problem using greedy approach
+Solves PECT problem using naive approach (greedy without optimal greedy step)
 
 Args:
     pect: PECT problem
@@ -16,7 +16,7 @@ from pect import Pectp, Pects
 
 def solve(pect: Pectp) -> Pects:
     """
-    Solves PECT problem using greedy approach
+    Solves PECT problem using naive approach
 
     Args:
         pect: PECT problem
@@ -45,8 +45,7 @@ def solve(pect: Pectp) -> Pects:
     ]
     attendees = [sum(attends_transposed[event]) for event in range(n)]
 
-    available_events = sorted(list(range(n)), key=lambda x: attendees[x], reverse=True)
-    rooms = sorted(list(range(r)), key=lambda x: room_sizes[x], reverse=True)
+    available_events = set(range(n))
 
     for room in range(r):
         for event in range(n):
@@ -63,7 +62,7 @@ def solve(pect: Pectp) -> Pects:
     for timeslot in range(45):
         busy_students = [0 for _ in range(s)]
         timeslot_unavailable_events = set()
-        for room in rooms:
+        for room in range(r):
             to_be_removed = set()
             for event in available_events:
                 if event in timeslot_unavailable_events:
@@ -93,11 +92,10 @@ def solve(pect: Pectp) -> Pects:
                         timeslot_unavailable_events.add(available_event)
                 to_be_removed.add(event)
                 break
-            available_events = [
-                event for event in available_events if event not in to_be_removed
-            ]
+            available_events = available_events - to_be_removed
 
     return solution
 
-solve.__name__ = 'greedy'
+
+solve.__name__ = "naive"
 sys.modules[__name__] = solve

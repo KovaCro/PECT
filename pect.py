@@ -5,9 +5,7 @@ from utils import consecutive_groups, find_duplicate_indices
 
 
 # PECT problem
-type Pectp = tuple[
-    int, int, int, int, list[int], list[int], list[int], list[int], list[int], list[int]
-]
+type Pectp = list[int | list[int] | list[list[int]]]
 # PECT solution
 type Pects = list[list[int]]
 
@@ -70,7 +68,7 @@ def parse_problem(path: Path) -> Pectp:
                 tmp.append(int(file.readline()))
             before.append(tmp)
 
-        return (
+        return [
             n,
             r,
             f,
@@ -81,7 +79,7 @@ def parse_problem(path: Path) -> Pectp:
             eventfeatures,
             event_availability,
             before,
-        )
+        ]
 
 
 def parse_solution(path: Path, pect: Pectp) -> Pects:
@@ -139,7 +137,7 @@ def is_valid(pect: Pectp, solution: Pects, fails: list[object] = None) -> bool:
         True if solution is valid, False otherwise
     """
 
-    (
+    [
         n,
         _,
         _,
@@ -150,7 +148,7 @@ def is_valid(pect: Pectp, solution: Pects, fails: list[object] = None) -> bool:
         eventfeatures,
         event_availability,
         before,
-    ) = pect
+    ] = pect
 
     # IMPORTANT:
     # When event fails, it gets ignored in future checks
@@ -289,7 +287,7 @@ def evaluate(pect: Pectp, solution: Pects) -> tuple[int, int]:
         Distance to feasibility and soft cost
     """
 
-    (
+    [
         n,
         _,
         _,
@@ -300,7 +298,7 @@ def evaluate(pect: Pectp, solution: Pects) -> tuple[int, int]:
         _,
         _,
         _,
-    ) = pect
+    ] = pect
 
     distance_to_feasibility = 0
     soft_cost = 0
@@ -340,6 +338,24 @@ def evaluate(pect: Pectp, solution: Pects) -> tuple[int, int]:
 
     return distance_to_feasibility, soft_cost
 
+
+def total_cost(pect: Pectp, solution: Pects) -> int:
+    """
+    Returns total cost of evaluation
+
+    Args:
+        pect: PECT problem
+        solution: PECT solution
+
+    Returns:
+        Total cost
+    """
+
+    evaluation = evaluate(pect, solution)
+
+    return evaluation[0] + evaluation[1]
+
+
 def write_solution(path: Path, solution: Pects) -> None:
     """
     Writes a solution to file
@@ -364,7 +380,7 @@ def write_formatted_solution(path: Path, pect: Pectp, solution: Pects) -> None:
         solution: PECT solution
     """
 
-    (
+    [
         _,
         r,
         _,
@@ -375,7 +391,7 @@ def write_formatted_solution(path: Path, pect: Pectp, solution: Pects) -> None:
         _,
         _,
         _,
-    ) = pect
+    ] = pect
 
     timetable = [[["-" for _ in range(5)] for _ in range(9)] for _ in range(r)]
 
