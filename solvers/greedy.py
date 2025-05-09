@@ -25,7 +25,7 @@ def solve(pect: Pectp) -> Pects:
         PECT problem
     """
 
-    [
+    (
         n,
         r,
         _,
@@ -36,7 +36,7 @@ def solve(pect: Pectp) -> Pects:
         eventfeatures,
         event_availability,
         before,
-    ] = pect
+    ) = pect
 
     solution = [[-1, -1] for _ in range(n)]
     room_satisfies_event = [[1 for _ in range(n)] for _ in range(r)]

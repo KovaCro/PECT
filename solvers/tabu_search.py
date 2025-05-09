@@ -26,7 +26,7 @@ def solve(pect: Pectp) -> Pects:
         PECT problem
     """
 
-    [
+    (
         n,
         r,
         _,
@@ -37,8 +37,9 @@ def solve(pect: Pectp) -> Pects:
         eventfeatures,
         event_availability,
         before,
-    ] = pect
+    ) = pect
 
+    # pylint: disable=not-callable
     solution = naive(pect)
     # TODO
 
