@@ -321,11 +321,12 @@ def fast_neighbourhood(
     ) = np_pect
 
     t = 45
+    T = 9
     solution = np_solution
     neighbours = []
 
     # how many students per event
-    attendees = np.sum(attends, axis=0, dtype=np.uint32)
+    attendees = np.sum(attends, axis=0, dtype=np.int32)
 
     # is room valid for event
     room_satisfies_event = (room_sizes[:, None] >= attendees[None, :]) & np.all(
@@ -342,11 +343,44 @@ def fast_neighbourhood(
         ts = solution[e, 0]
         ts_students_bool[ts] |= attends[:, e]
 
+    def compute_delta_consec_insert(d, h, attending):
+        A = ts_students_bool[d * T : (d + 1) * T, attending]
+        k_left = (
+            np.sum(np.cumprod(A[h - 1 :: -1, :], axis=0), axis=0)
+            if h > 0
+            else np.zeros(sum(attending), dtype=int)
+        )
+        k_right = (
+            np.sum(np.cumprod(A[h + 1 :, :], axis=0), axis=0)
+            if h < T - 1
+            else np.zeros(sum(attending), dtype=int)
+        )
+        delta_per_student = (
+            -np.maximum(k_left - 2, 0)
+            - np.maximum(k_right - 2, 0)
+            + np.maximum(k_left + k_right + 1 - 2, 0)
+        )
+        return np.sum(delta_per_student)
+
+    def compute_delta_consec_extract(d, h, attending):
+        A = ts_students_bool[d * T : (d + 1) * T, attending]
+        L_left = np.sum(np.cumprod(A[h::-1, :], axis=0), axis=0)
+        L_right = np.sum(np.cumprod(A[h:, :], axis=0), axis=0)
+        k = L_left + L_right - 1
+        delta_per_student = (
+            -np.maximum(k - 2, 0)
+            + np.maximum(L_left - 1 - 2, 0)
+            + np.maximum(L_right - 1 - 2, 0)
+        )
+        return np.sum(delta_per_student)
+
     # Insert, Extract, Swap
 
     # Insert:
     if moves[0]:
         for event in unscheduled_events:
+            attending = attends[:, event]
+
             # Condition 4
             valid_timeslots = np.where(event_availability[event])[0]
             # Condition 2
@@ -366,18 +400,45 @@ def fast_neighbourhood(
                         continue
 
                     # Condition 1
-                    if np.any(attends[:, event] & ts_students_bool[ts]):
+                    if np.any(attending & ts_students_bool[ts]):
                         continue
 
-                    delta_distance = 0  # Placeholder
-                    delta_soft = 0  # Placeholder
+                    day = ts // T
+                    hour = ts % T
+                    num_events_day = np.sum(
+                        ts_students_bool[day * T : (day + 1) * T, :], axis=0
+                    )
+                    num_events_day_attending = num_events_day[attending]
+                    delta_single = np.sum(num_events_day_attending == 0) - np.sum(
+                        num_events_day_attending == 1
+                    )
+                    delta_last = np.sum(attending) if hour == T - 1 else 0
+                    delta_consec = compute_delta_consec_insert(day, hour, attending)
+
+                    delta_soft = delta_single + delta_last + delta_consec
+                    delta_distance = -attendees[event]
+
                     neighbours.append([event, ts, room, delta_distance, delta_soft])
 
     # Extract:
     if moves[1]:
         for event in scheduled_events:
-            delta_distance = 0  # Placeholder
-            delta_soft = 0  # Placeholder
+            attending = attends[:, event]
+            day = ts // T
+            hour = ts % T
+            num_events_day = np.sum(
+                ts_students_bool[day * T : (day + 1) * T, :], axis=0
+            )
+            num_events_day_attending = num_events_day[attending]
+            delta_single = np.sum(num_events_day_attending == 2) - np.sum(
+                num_events_day_attending == 1
+            )
+            delta_last = -np.sum(attending) if hour == T - 1 else 0
+            delta_consec = compute_delta_consec_extract(day, hour, attending)
+
+            delta_soft = delta_single + delta_last + delta_consec
+            delta_distance = attendees[event]
+
             neighbours.append([event, -1, -1, delta_distance, delta_soft])
 
     # Swap:
@@ -421,8 +482,58 @@ def fast_neighbourhood(
                 ):
                     continue
 
-                delta_distance = 0  # Placeholder
-                delta_soft = 0  # Placeholder
+                attending_e1_only = attends[:, e1] & ~attends[:, e2]
+                attending_e2_only = attends[:, e2] & ~attends[:, e1]
+                d1, h1 = ts1 // T, ts1 % T
+                d2, h2 = ts2 // T, ts2 % T
+                num_events_d1 = np.sum(
+                    ts_students_bool[d1 * T : (d1 + 1) * T, :], axis=0
+                )
+                num_events_d2 = np.sum(
+                    ts_students_bool[d2 * T : (d2 + 1) * T, :], axis=0
+                )
+                delta_single_e1 = (
+                    0
+                    if d1 == d2
+                    else (
+                        np.sum(num_events_d1[attending_e1_only] == 2)
+                        - np.sum(num_events_d1[attending_e1_only] == 1)
+                        + np.sum(num_events_d2[attending_e1_only] == 0)
+                        - np.sum(num_events_d2[attending_e1_only] == 1)
+                    )
+                )
+                delta_single_e2 = (
+                    0
+                    if d1 == d2
+                    else (
+                        np.sum(num_events_d2[attending_e2_only] == 2)
+                        - np.sum(num_events_d2[attending_e2_only] == 1)
+                        + np.sum(num_events_d1[attending_e2_only] == 0)
+                        - np.sum(num_events_d1[attending_e2_only] == 1)
+                    )
+                )
+                delta_last_e1 = np.sum(attending_e1_only) * (
+                    (1 if h2 == T - 1 else 0) - (1 if h1 == T - 1 else 0)
+                )
+                delta_last_e2 = np.sum(attending_e2_only) * (
+                    (1 if h1 == T - 1 else 0) - (1 if h2 == T - 1 else 0)
+                )
+                delta_consec_e1 = compute_delta_consec_extract(
+                    d1, h1, attending_e1_only
+                ) + compute_delta_consec_insert(d2, h2, attending_e1_only)
+                delta_consec_e2 = compute_delta_consec_extract(
+                    d2, h2, attending_e2_only
+                ) + compute_delta_consec_insert(d1, h1, attending_e2_only)
+
+                delta_soft = (
+                    delta_single_e1
+                    + delta_last_e1
+                    + delta_consec_e1
+                    + delta_single_e2
+                    + delta_last_e2
+                    + delta_consec_e2
+                )
+                delta_distance = 0
 
                 neighbours.append([-1, e1, e2, delta_distance, delta_soft])
 
