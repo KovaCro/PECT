@@ -10,7 +10,6 @@ Returns:
     PECT problem
 """
 
-import sys
 from pect import Pectp, Pects
 
 
@@ -97,5 +96,5 @@ def solve(pect: Pectp) -> Pects:
     return solution
 
 
-solve.__name__ = "naive"
-sys.modules[__name__] = solve
+def __call__(pect, **kwargs):
+    return solve(pect, **kwargs)

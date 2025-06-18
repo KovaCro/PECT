@@ -23,7 +23,7 @@ def parse_problem(path: Path) -> Pectp:
     Returns:
         PECT problem
     """
-
+    
     with open(path, "r", encoding="utf") as file:
         first_line = file.readline().split(" ")
         t = 45
@@ -288,10 +288,11 @@ def to_numpy(pect: Pectp, solution: Pects) -> tuple:
     )
 
 
-def vectorized_fast_neighbourhood(
+def fast_neighbourhood(
     np_pect: any,
     np_solution: any,
     moves: tuple[bool, bool, bool] = (True, True, True),
+    sampling_rate: float = 1.0
 ) -> np.ndarray:
     """
     Efficiently generates and returns neighbourhood of a solution.
@@ -304,14 +305,15 @@ def vectorized_fast_neighbourhood(
         np_pect: numpy PECT problem
         np_solution: numpy PECT solution
         moves: tuple of booleans (insert, extract, swap) indicating which types of moves to include in the neighbourhood
+        sampling_rate: float indicating the fraction of moves to be processed
 
     Returns:
         Array of neighbours
     """
     (
-        _,
+        n,
         r,
-        _,
+        f,
         s,
         room_sizes,
         attends,
@@ -336,32 +338,36 @@ def vectorized_fast_neighbourhood(
         (~eventfeatures[None, :, :] | roomfeatures[:, None, :]), axis=2
     )  # (r, n)
 
-    # scheduled/unschedules indxs
+    # scheduled/unschedules indxs and timeslots
     unscheduled_events = np.where(solution[:, 0] == -1)[0]  # (u,)
     scheduled_events = np.where(solution[:, 0] != -1)[0]  # (m,)
-
-    # pred and succ timeslots
     timeslots = solution[:, 0]  # (n,)
     scheduled = solution[:, 0] != -1  # (n,)
+    
+    # pred and succ timeslots
     max_pred_ts = np.max(
-        np.where(before & scheduled[None, :], timeslots[None, :], -1), axis=1
+        np.where(before & scheduled[:, None], timeslots[:, None], -1), axis=0
     )  # (n,)
     min_succ_ts = np.min(
-        np.where(before & scheduled[:, None], timeslots[:, None], t), axis=0
+        np.where(before & scheduled[None, :], timeslots[None, :], t), axis=1
     )  # (n,)
 
     # occcupied pairs
-    occupied_pairs = np.zeros((t, r), dtype=bool)  # (t, r)
+    occupied_pairs = np.zeros((t, r), dtype=np.bool_)  # (t, r)
     occupied_pairs[solution[scheduled_events, 0], solution[scheduled_events, 1]] = (
         True
     ) # (t, r)
 
     # student in timeslot
     ts_students_bool = np.zeros((t, s), dtype=np.bool_)  # (t, s)
-    ts_students_bool[solution[scheduled_events, 0]] |= attends[
-        :, scheduled_events
-    ].T  # (t, s)
-
+    #ts_students_bool[solution[scheduled_events, 0]] |= attends[:, scheduled_events].T  # (t, s)
+    # TODO: vectorize to keep it consistent with rest
+    scheduled_timeslots = solution[scheduled_events, 0]
+    for ts in range(t):
+        events_in_ts = scheduled_events[scheduled_timeslots == ts]
+        if events_in_ts.size > 0:
+            ts_students_bool[ts] = np.any(attends[:, events_in_ts], axis=1)
+            
     # events in day for student
     day_busy = np.sum(
         ts_students_bool.reshape(5, T, -1), axis=1, dtype=np.uint8
@@ -397,15 +403,21 @@ def vectorized_fast_neighbourhood(
 
     # Insert:
     if moves[0]:
+        # Sampling
+        k = len(unscheduled_events)
+        if k == 0:
+            sampled = []
+        else:
+            sampled = np.random.choice(k, size=int(max(1, sampling_rate*k)))
         # Condition 4
-        valid_rooms_per_event = room_satisfies_event[:, unscheduled_events]  # (r, u)
+        valid_rooms_per_event = room_satisfies_event[:, unscheduled_events[sampled]]  # (r, u)
         # Condition 2
-        valid_ts_per_event = event_availability[unscheduled_events]  # (u, t)
+        valid_ts_per_event = event_availability[unscheduled_events[sampled]]  # (u, t)
         room_idx, event_idx, ts_idx = np.where(
             valid_rooms_per_event[:, :, None] & valid_ts_per_event[None, :, :]
         )
         events, timeslots, rooms = (
-            unscheduled_events[event_idx],
+            unscheduled_events[sampled[event_idx]],
             ts_idx,
             room_idx,
         ) # (k,)
@@ -426,14 +438,20 @@ def vectorized_fast_neighbourhood(
             rooms[conflict_mask],
         )  # (k'',)
         # Condition 5
-        successor_mask = timeslots < min_succ_ts[events]  # (k'',)
+        successor_mask = timeslots < min_succ_ts[events] # (k'',)
         events, timeslots, rooms = (
             events[successor_mask],
             timeslots[successor_mask],
             rooms[successor_mask],
-        )  # (k''',)
+        ) # (k''',)
+        predecessor_mask = timeslots > max_pred_ts[events] # (k''',)
+        events, timeslots, rooms = (
+            events[predecessor_mask],
+            timeslots[predecessor_mask],
+            rooms[predecessor_mask],
+        ) # (k'''',)
 
-        # k <=> k'''
+        # k <=> k''''
         days = timeslots // T  # (k,)
         hours = timeslots % T  # (k,)
         attending = attends[:, events]  # (s, k)
@@ -461,11 +479,18 @@ def vectorized_fast_neighbourhood(
 
     # Extract:
     if moves[1]:
+        # Sampling
+        k = len(scheduled_events)
+        if k == 0:
+            sampled = []
+        else:
+            sampled = np.random.choice(k, size=int(max(1, sampling_rate*k)))
+        scheduled_sampled = scheduled_events[sampled]
         # All conditions
         events, timeslots, rooms = (
-            scheduled_events,
-            solution[scheduled_events, 0],
-            solution[scheduled_events, 1],
+            scheduled_sampled,
+            solution[scheduled_sampled, 0],
+            solution[scheduled_sampled, 1],
         )  # (m,)
         k = len(events)
 
@@ -499,8 +524,14 @@ def vectorized_fast_neighbourhood(
     if moves[2]:
         # Condition 3
         i, j = np.triu_indices(len(scheduled_events), k=1)
-        e1 = scheduled_events[i]  # Shape: (k,)
-        e2 = scheduled_events[j]  # Shape: (k,)
+        # Sampling
+        k = len(i)
+        if k == 0:
+            sampled = []
+        else:
+            sampled = np.random.choice(k, size=int(max(1, sampling_rate*k)))
+        e1 = scheduled_events[i[sampled]]  # Shape: (k,)
+        e2 = scheduled_events[j[sampled]]  # Shape: (k,)
         ts1, r1 = solution[e1, 0], solution[e1, 1]  # (k,)
         ts2, r2 = solution[e2, 0], solution[e2, 1]  # (k,)
 
@@ -531,12 +562,12 @@ def vectorized_fast_neighbourhood(
         ) # (k'',)
 
         # Condition 5
-        # Over constrained (ignores ts1 and ts2 influence)
         e1_pred_ok = ts2 > max_pred_ts[e1]  # (k'',)
         e1_succ_ok = ts2 < min_succ_ts[e1]  # (k'',)
         e2_pred_ok = ts1 > max_pred_ts[e2]  # (k'',)
         e2_succ_ok = ts1 < min_succ_ts[e2]  # (k'',)
-        valid_swap = e1_pred_ok & e1_succ_ok & e2_pred_ok & e2_succ_ok
+        e1_e2_ok = ~(before[e1, e2] | before[e2, e1]) # (k'',)
+        valid_swap = e1_pred_ok & e1_succ_ok & e2_pred_ok & e2_succ_ok & e1_e2_ok
         e1, e2, ts1, ts2, r1, r2 = (
             e1[valid_swap],
             e2[valid_swap],
@@ -626,249 +657,6 @@ def vectorized_fast_neighbourhood(
         neighbour_idx += k_valid
 
     return neighbours[:neighbour_idx]
-
-
-def fast_neighbourhood(
-    np_pect: any,
-    np_solution: any,
-    moves: tuple[bool, bool, bool] = (True, True, True),
-) -> np.ndarray:
-    """
-    Efficiently generates and returns neighbourhood of a solution.
-    In case the neighbour is generated by swap step, array is in the form
-    [event, timeslot, room, relative distance to feasibility, relative soft cost].
-    In case the neighbour is generated by swap step, array is in the form
-    [-1, event1, event2, relative distance to feasibility, relative soft cost]
-
-    Args:
-        np_pect: numpy PECT problem
-        np_solution: numpy PECT solution
-        moves: tuple of booleans (insert, extract, swap) indicating which types of moves to include in the neighbourhood
-
-    Returns:
-        Array of neighbours
-    """
-    (
-        n,
-        r,
-        _,
-        s,
-        room_sizes,
-        attends,
-        roomfeatures,
-        eventfeatures,
-        event_availability,
-        before,
-    ) = np_pect
-
-    t = 45
-    T = 9
-    solution = np_solution
-    neighbours = []
-
-    # how many students per event
-    attendees = np.sum(attends, axis=0, dtype=np.int32)
-
-    # is room valid for event
-    room_satisfies_event = (room_sizes[:, None] >= attendees[None, :]) & np.all(
-        (~eventfeatures[None, :, :] | roomfeatures[:, None, :]), axis=2
-    )
-
-    unscheduled_events = np.where(solution[:, 0] == -1)[0]
-    scheduled_events = np.where(solution[:, 0] != -1)[0]
-
-    occupied_pairs = set(tuple(pair) for pair in solution[scheduled_events])
-
-    ts_students_bool = np.zeros((t, s), dtype=np.bool_)
-    for e in scheduled_events:
-        ts = solution[e, 0]
-        ts_students_bool[ts] |= attends[:, e]
-
-    def compute_delta_consec_insert(d, h, attending):
-        a = ts_students_bool[d * T : (d + 1) * T, attending]
-        left = (
-            np.sum(np.cumprod(a[h - 1 :: -1, :], axis=0), axis=0)
-            if h > 0
-            else np.zeros(sum(attending), dtype=int)
-        )
-        right = (
-            np.sum(np.cumprod(a[h + 1 :, :], axis=0), axis=0)
-            if h < T - 1
-            else np.zeros(sum(attending), dtype=int)
-        )
-        delta_per_student = (
-            -np.maximum(left - 2, 0)
-            - np.maximum(right - 2, 0)
-            + np.maximum(left + right -1, 0)
-        )
-        return np.sum(delta_per_student)
-
-    def compute_delta_consec_extract(d, h, attending):
-        a = ts_students_bool[d * T : (d + 1) * T, attending]
-        left = np.sum(np.cumprod(a[h::-1, :], axis=0), axis=0)
-        right = np.sum(np.cumprod(a[h:, :], axis=0), axis=0)
-        k = left + right - 1
-        delta_per_student = (
-            -np.maximum(k - 2, 0)
-            + np.maximum(left - 3, 0)
-            + np.maximum(right - 3, 0)
-        )
-        return np.sum(delta_per_student)
-
-    # Insert, Extract, Swap
-
-    # Insert:
-    if moves[0]:
-        for event in unscheduled_events:
-            attending = attends[:, event]
-            # Condition 4
-            valid_timeslots = np.where(event_availability[event])[0]
-            # Condition 2
-            valid_rooms = np.where(room_satisfies_event[:, event])[0]
-            for ts in valid_timeslots:
-                for room in valid_rooms:
-                    # Condition 3
-                    if (ts, room) in occupied_pairs:
-                        continue
-                    # Condition 5
-                    successors = np.where(before[event])[0]
-                    if np.any(
-                        (solution[successors, 0] != -1) & (solution[successors, 0] < ts)
-                    ):
-                        continue
-                    # Condition 1
-                    if np.any(attending & ts_students_bool[ts]):
-                        continue
-
-                    day = ts // T
-                    hour = ts % T
-                    num_events_day_attending = np.sum(
-                        ts_students_bool[day * T : (day + 1) * T, attending], axis=0
-                    )
-                    delta_single = np.sum(num_events_day_attending == 0) - np.sum(
-                        num_events_day_attending == 1
-                    )
-                    delta_last = np.sum(attending) if hour == T - 1 else 0
-                    delta_consec = compute_delta_consec_insert(day, hour, attending)
-
-                    delta_soft = delta_single + delta_last + delta_consec
-                    delta_distance = -attendees[event]
-
-                    neighbours.append([event, ts, room, delta_distance, delta_soft])
-
-    # Extract:
-    if moves[1]:
-        for event in scheduled_events:
-            attending = attends[:, event]
-            day = ts // T
-            hour = ts % T
-            num_events_day_attending = np.sum(
-                ts_students_bool[day * T : (day + 1) * T, attending], axis=0
-            )
-            delta_single = np.sum(num_events_day_attending == 2) - np.sum(
-                num_events_day_attending == 1
-            )
-            delta_last = -np.sum(attending) if hour == T - 1 else 0
-            delta_consec = compute_delta_consec_extract(day, hour, attending)
-
-            delta_soft = delta_single + delta_last + delta_consec
-            delta_distance = attendees[event]
-
-            neighbours.append([event, -1, -1, delta_distance, delta_soft])
-
-    # Swap:
-    if moves[2]:
-        for i, e1 in enumerate(scheduled_events):
-            for j in range(i + 1, len(scheduled_events)):
-                e2 = scheduled_events[j]
-                # Condition 3
-                ts1, room1 = solution[e1]
-                ts2, room2 = solution[e2]
-                # Condition 4
-                if not (event_availability[e1, ts2] and event_availability[e2, ts1]):
-                    continue
-                # Condition 2
-                if not (
-                    room_satisfies_event[room2, e1] and room_satisfies_event[room1, e2]
-                ):
-                    continue
-                # Condition 1
-                ts1_students = ts_students_bool[ts1] & ~attends[:, e1]
-                ts2_students = ts_students_bool[ts2] & ~attends[:, e2]
-                if np.any(attends[:, e1] & ts2_students) or np.any(
-                    attends[:, e2] & ts1_students
-                ):
-                    continue
-                # Condition 5
-                successors_e1 = np.where(before[e1])[0]
-                if np.any(
-                    (solution[successors_e1, 0] != -1)
-                    & (solution[successors_e1, 0] < ts2)
-                ):
-                    continue
-                successors_e2 = np.where(before[e2])[0]
-                if np.any(
-                    (solution[successors_e2, 0] != -1)
-                    & (solution[successors_e2, 0] < ts1)
-                ):
-                    continue
-
-                attending_e1_only = attends[:, e1] & ~attends[:, e2]
-                attending_e2_only = attends[:, e2] & ~attends[:, e1]
-                d1, h1 = ts1 // T, ts1 % T
-                d2, h2 = ts2 // T, ts2 % T
-                num_events_d1 = np.sum(
-                    ts_students_bool[d1 * T : (d1 + 1) * T, :], axis=0
-                )
-                num_events_d2 = np.sum(
-                    ts_students_bool[d2 * T : (d2 + 1) * T, :], axis=0
-                )
-                delta_single_e1 = (
-                    0
-                    if d1 == d2
-                    else (
-                        np.sum(num_events_d1[attending_e1_only] == 2)
-                        - np.sum(num_events_d1[attending_e1_only] == 1)
-                        + np.sum(num_events_d2[attending_e1_only] == 0)
-                        - np.sum(num_events_d2[attending_e1_only] == 1)
-                    )
-                )
-                delta_single_e2 = (
-                    0
-                    if d1 == d2
-                    else (
-                        np.sum(num_events_d2[attending_e2_only] == 2)
-                        - np.sum(num_events_d2[attending_e2_only] == 1)
-                        + np.sum(num_events_d1[attending_e2_only] == 0)
-                        - np.sum(num_events_d1[attending_e2_only] == 1)
-                    )
-                )
-                delta_last_e1 = attendees[e1] * (
-                    (1 if h2 == T - 1 else 0) - (1 if h1 == T - 1 else 0)
-                )
-                delta_last_e2 = attendees[e2] * (
-                    (1 if h1 == T - 1 else 0) - (1 if h2 == T - 1 else 0)
-                )
-                delta_consec_e1 = compute_delta_consec_extract(
-                    d1, h1, attending_e1_only
-                ) + compute_delta_consec_insert(d2, h2, attending_e1_only)
-                delta_consec_e2 = compute_delta_consec_extract(
-                    d2, h2, attending_e2_only
-                ) + compute_delta_consec_insert(d1, h1, attending_e2_only)
-
-                delta_soft = (
-                    delta_single_e1
-                    + delta_last_e1
-                    + delta_consec_e1
-                    + delta_single_e2
-                    + delta_last_e2
-                    + delta_consec_e2
-                )
-                delta_distance = 0
-
-                neighbours.append([-1, e1, e2, delta_distance, delta_soft])
-
-    return np.array(neighbours, dtype=np.int32)
 
 
 def evaluate(pect: Pectp, solution: Pects) -> tuple[int, int]:

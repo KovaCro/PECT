@@ -1,4 +1,4 @@
-""" 
+"""
 Tabu search solver module (callable)
 
 Solves PECT problem using tabu search
@@ -10,40 +10,94 @@ Returns:
     PECT problem
 """
 
-import sys
-from pect import Pectp, Pects
-from solvers import naive
+import numpy as np
+from tqdm import tqdm
+from pect import Pectp, Pects, to_numpy, fast_neighbourhood
 
-
-def solve(pect: Pectp) -> Pects:
+def solve(
+    pect: Pectp,
+    initial_solution: Pects | None = None,
+    num_iter: int = 1000,
+    neighbourhood_sampling_rate: float = 0.2,
+    tabu_size: int = 10,
+    aspir: bool = False,
+) -> Pects:
     """
     Solves PECT problem using tabu search
 
     Args:
         pect: PECT problem
+        initial_solution: initial solution (defaults to all events unslotted)
+        num_iter: number of iterations
+        neighbourhood_sampling_rate: float indicating the fraction of moves to be processed
+        tabu_size: size of the tabu list
+        aspir: boolean indicating whether to use aspiration or not
 
     Returns:
         PECT problem
     """
 
-    (
-        n,
-        r,
-        _,
-        s,
-        room_sizes,
-        attends,
-        roomfeatures,
-        eventfeatures,
-        event_availability,
-        before,
-    ) = pect
+    n = pect[0]
 
-    # pylint: disable=not-callable
-    solution = naive(pect)
-    # TODO
+    if initial_solution is None:
+        initial_solution = [[-1, -1] for _ in range(n)]
 
-    return solution
+    np_pect, np_solution = to_numpy(pect, initial_solution)
+    tabu_mask = np.zeros((n), dtype=np.bool)
+    tabu_list = -1 * np.ones((tabu_size), dtype=np.int32)
+    tabu_ind = 0
 
-solve.__name__ = 'tabu_search'
-sys.modules[__name__] = solve
+    def update_tabu(new_tabu):
+        nonlocal tabu_ind
+        if tabu_ind == tabu_size:
+            tabu_ind = 0
+        if tabu_list[tabu_ind] == -1:
+            tabu_list[tabu_ind] = new_tabu
+            tabu_mask[new_tabu] = True
+            tabu_ind += 1
+        else:
+            curr_tabu = tabu_list[tabu_ind]
+            tabu_mask[curr_tabu] = False
+            tabu_list[tabu_ind] = new_tabu
+            tabu_mask[new_tabu] = True
+            tabu_ind += 1
+
+    for _ in tqdm(range(num_iter)):
+        neighbourhood = fast_neighbourhood(
+            np_pect, np_solution, sampling_rate=neighbourhood_sampling_rate
+        )
+
+        if not neighbourhood.size:
+            continue
+
+        tabu_conflict = (
+            (neighbourhood[:, 0] == -1)
+            & (tabu_mask[neighbourhood[:, 1]] | tabu_mask[neighbourhood[:, 2]])
+        ) | ((neighbourhood[:, 0] != -1) & tabu_mask[neighbourhood[:, 0]]) # (k,)
+
+        if aspir:
+            pass
+
+        neighbourhood = neighbourhood[~tabu_conflict] # (k',)
+
+        neighbour_ind = np.lexsort((neighbourhood[:, 4], neighbourhood[:, 3]))[0]
+
+        neighbour = neighbourhood[neighbour_ind]
+        if neighbour[0] == -1:
+            e1, e2 = neighbour[1], neighbour[2]
+            tmp = np_solution[e1].copy()
+            np_solution[e1] = np_solution[e2].copy()
+            np_solution[e2] = tmp
+            update_tabu(e1)
+            update_tabu(e2)
+        else:
+            e, ts, r = neighbour[:3]
+            np_solution[e][0] = ts
+            np_solution[e][1] = r
+            update_tabu(e)
+
+    return np_solution.tolist()
+
+
+def __call__(pect, **kwargs):
+    return solve(pect, **kwargs)
