@@ -2,17 +2,12 @@
 Tabu search solver module (callable)
 
 Solves PECT problem using tabu search
-
-Args:
-    pect: PECT problem
-
-Returns:
-    PECT problem
 """
 
 import numpy as np
 from tqdm import tqdm
-from pect import Pectp, Pects, to_numpy, fast_neighbourhood
+from pect import Pectp, Pects, to_numpy, fast_neighbourhood, evaluate
+
 
 def solve(
     pect: Pectp,
@@ -43,7 +38,7 @@ def solve(
         initial_solution = [[-1, -1] for _ in range(n)]
 
     np_pect, np_solution = to_numpy(pect, initial_solution)
-    tabu_mask = np.zeros((n), dtype=np.bool)
+    tabu_mask = np.zeros((n), dtype=np.bool_)
     tabu_list = -1 * np.ones((tabu_size), dtype=np.int32)
     tabu_ind = 0
 
@@ -62,6 +57,8 @@ def solve(
             tabu_mask[new_tabu] = True
             tabu_ind += 1
 
+    best_cost = np.array([float("inf"), float("inf")])
+
     for _ in tqdm(range(num_iter)):
         neighbourhood = fast_neighbourhood(
             np_pect, np_solution, sampling_rate=neighbourhood_sampling_rate
@@ -73,12 +70,27 @@ def solve(
         tabu_conflict = (
             (neighbourhood[:, 0] == -1)
             & (tabu_mask[neighbourhood[:, 1]] | tabu_mask[neighbourhood[:, 2]])
-        ) | ((neighbourhood[:, 0] != -1) & tabu_mask[neighbourhood[:, 0]]) # (k,)
+        ) | (
+            (neighbourhood[:, 0] != -1) & tabu_mask[neighbourhood[:, 0]]
+        )  # (k,)
 
         if aspir:
-            pass
+            current_cost = np.array(evaluate(pect, np_solution.tolist()))
+            if (current_cost[0] < best_cost[0]) or (
+                (current_cost[0] == best_cost[0]) and (current_cost[1] < best_cost[1])
+            ):
+                best_cost = current_cost
+            new_costs = current_cost + neighbourhood[:, 3:5]
+            aspiration_moves = tabu_conflict & (
+                (new_costs[:, 0] < best_cost[0]) 
+                | ((new_costs[:, 0] == best_cost[0]) & (new_costs[:, 0] < best_cost[1]))
+            )
+            tabu_conflict = tabu_conflict & (~aspiration_moves)
 
-        neighbourhood = neighbourhood[~tabu_conflict] # (k',)
+        neighbourhood = neighbourhood[~tabu_conflict]  # (k',)
+
+        if not neighbourhood.size:
+            continue
 
         neighbour_ind = np.lexsort((neighbourhood[:, 4], neighbourhood[:, 3]))[0]
 

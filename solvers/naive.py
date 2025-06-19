@@ -2,12 +2,6 @@
 Naive solver module (callable)
 
 Solves PECT problem using naive approach (greedy without optimal greedy step)
-
-Args:
-    pect: PECT problem
-
-Returns:
-    PECT problem
 """
 
 from pect import Pectp, Pects

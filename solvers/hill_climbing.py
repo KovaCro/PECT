@@ -2,12 +2,6 @@
 Hill climbing solver module (callable)
 
 Solves PECT problem using hill climbing
-
-Args:
-    pect: PECT problem
-
-Returns:
-    PECT problem
 """
 
 from typing import Literal

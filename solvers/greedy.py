@@ -2,12 +2,6 @@
 Greedy solver module (callable)
 
 Solves PECT problem using greedy approach
-
-Args:
-    pect: PECT problem
-
-Returns:
-    PECT problem
 """
 
 from pect import Pectp, Pects
