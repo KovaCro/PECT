@@ -5,7 +5,6 @@ Solves PECT problem using tabu search
 """
 
 import numpy as np
-from tqdm import tqdm
 from pect import Pectp, Pects, to_numpy, fast_neighbourhood, evaluate
 
 
@@ -59,7 +58,7 @@ def solve(
 
     best_cost = np.array([float("inf"), float("inf")])
 
-    for _ in tqdm(range(num_iter)):
+    for _ in range(num_iter):
         neighbourhood = fast_neighbourhood(
             np_pect, np_solution, sampling_rate=neighbourhood_sampling_rate
         )
@@ -82,7 +81,7 @@ def solve(
                 best_cost = current_cost
             new_costs = current_cost + neighbourhood[:, 3:5]
             aspiration_moves = tabu_conflict & (
-                (new_costs[:, 0] < best_cost[0]) 
+                (new_costs[:, 0] < best_cost[0])
                 | ((new_costs[:, 0] == best_cost[0]) & (new_costs[:, 0] < best_cost[1]))
             )
             tabu_conflict = tabu_conflict & (~aspiration_moves)

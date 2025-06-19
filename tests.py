@@ -1,3 +1,4 @@
+""" PECT tests module. """
 import unittest
 from copy import deepcopy
 import os

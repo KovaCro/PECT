@@ -1,0 +1,1 @@
+main.py -input C:\Users\marin\Desktop\PECT\datasets -output C:\Users\marin\Desktop\test_output -solver tabu_search -args '{\"num_iter\": 5}' 

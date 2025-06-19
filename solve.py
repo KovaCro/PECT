@@ -1,12 +1,11 @@
 from pathlib import Path
+from collections.abc import Callable
+from functools import partial
+import multiprocessing
 from concurrent.futures import ProcessPoolExecutor
 import inspect
 from tqdm import tqdm
-from functools import partial
-import inspect
-from collections.abc import Callable
 import pect
-import multiprocessing
 
 
 def process_single_problem(
@@ -66,7 +65,8 @@ def generate_and_evaluate_solutions(
 
     solver_type = inspect.getmodule(solver).__name__
 
-    max_workers = multiprocessing.cpu_count()
+    if max_workers is None:
+        max_workers = multiprocessing.cpu_count()
 
     with ProcessPoolExecutor(max_workers=max_workers) as executor:
         # Convert Path objects to strings to avoid pickling issues

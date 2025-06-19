@@ -3,7 +3,6 @@
 from pathlib import Path
 import numpy as np
 from utils import consecutive_groups, find_duplicate_indices
-import time
 
 # PECT problem
 type Pectp = tuple[
@@ -23,7 +22,7 @@ def parse_problem(path: Path) -> Pectp:
     Returns:
         PECT problem
     """
-    
+
     with open(path, "r", encoding="utf") as file:
         first_line = file.readline().split(" ")
         t = 45
@@ -292,7 +291,7 @@ def fast_neighbourhood(
     np_pect: any,
     np_solution: any,
     moves: tuple[bool, bool, bool] = (True, True, True),
-    sampling_rate: float = 1.0
+    sampling_rate: float = 1.0,
 ) -> np.ndarray:
     """
     Efficiently generates and returns neighbourhood of a solution.
@@ -311,9 +310,9 @@ def fast_neighbourhood(
         Array of neighbours
     """
     (
-        n,
+        _,
         r,
-        f,
+        _,
         s,
         room_sizes,
         attends,
@@ -343,7 +342,7 @@ def fast_neighbourhood(
     scheduled_events = np.where(solution[:, 0] != -1)[0]  # (m,)
     timeslots = solution[:, 0]  # (n,)
     scheduled = solution[:, 0] != -1  # (n,)
-    
+
     # pred and succ timeslots
     max_pred_ts = np.max(
         np.where(before & scheduled[:, None], timeslots[:, None], -1), axis=0
@@ -355,20 +354,21 @@ def fast_neighbourhood(
     # occcupied pairs
     occupied_pairs = np.zeros((t, r), dtype=np.bool_)  # (t, r)
     occupied_pairs[solution[scheduled_events, 0], solution[scheduled_events, 1]] = (
-        True
-    ) # (t, r)
+        True  # (t, r)
+    )
 
     # student in timeslot
     ts_students_bool = np.zeros((t, s), dtype=np.bool_)  # (t, s)
-    #ts_students_bool[solution[scheduled_events, 0]] |= attends[:, scheduled_events].T  # (t, s)
+    # ts_students_bool[solution[scheduled_events, 0]] |= attends[:, scheduled_events].T  # (t, s)
     # TODO: vectorize to keep it consistent with rest
     scheduled_timeslots = solution[scheduled_events, 0]
     for ts in range(t):
         events_in_ts = scheduled_events[scheduled_timeslots == ts]
         if events_in_ts.size > 0:
             ts_students_bool[ts] = np.any(attends[:, events_in_ts], axis=1)
-            
+
     # events in day for student
+    # pylint: disable=too-many-function-args
     day_busy = np.sum(
         ts_students_bool.reshape(5, T, -1), axis=1, dtype=np.uint8
     )  # (num_days, s)
@@ -408,9 +408,11 @@ def fast_neighbourhood(
         if k == 0:
             sampled = []
         else:
-            sampled = np.random.choice(k, size=int(max(1, sampling_rate*k)))
+            sampled = np.random.choice(k, size=int(max(1, sampling_rate * k)))
         # Condition 4
-        valid_rooms_per_event = room_satisfies_event[:, unscheduled_events[sampled]]  # (r, u)
+        valid_rooms_per_event = room_satisfies_event[
+            :, unscheduled_events[sampled]
+        ]  # (r, u)
         # Condition 2
         valid_ts_per_event = event_availability[unscheduled_events[sampled]]  # (u, t)
         room_idx, event_idx, ts_idx = np.where(
@@ -420,7 +422,7 @@ def fast_neighbourhood(
             unscheduled_events[sampled[event_idx]],
             ts_idx,
             room_idx,
-        ) # (k,)
+        )  # (k,)
         # Condition 3
         occupied_mask = ~occupied_pairs[timeslots, rooms]  # (k,)
         events, timeslots, rooms = (
@@ -438,18 +440,18 @@ def fast_neighbourhood(
             rooms[conflict_mask],
         )  # (k'',)
         # Condition 5
-        successor_mask = timeslots < min_succ_ts[events] # (k'',)
+        successor_mask = timeslots < min_succ_ts[events]  # (k'',)
         events, timeslots, rooms = (
             events[successor_mask],
             timeslots[successor_mask],
             rooms[successor_mask],
-        ) # (k''',)
-        predecessor_mask = timeslots > max_pred_ts[events] # (k''',)
+        )  # (k''',)
+        predecessor_mask = timeslots > max_pred_ts[events]  # (k''',)
         events, timeslots, rooms = (
             events[predecessor_mask],
             timeslots[predecessor_mask],
             rooms[predecessor_mask],
-        ) # (k'''',)
+        )  # (k'''',)
 
         # k <=> k''''
         days = timeslots // T  # (k,)
@@ -459,7 +461,7 @@ def fast_neighbourhood(
         # Slow
         contributions = np.where(
             day_busy[days, :] == 0, 1, np.where(day_busy[days, :] == 1, -1, 0)
-        ) # (k, s)
+        )  # (k, s)
         delta_single = np.einsum("ij,ji->i", contributions, attending)  # (k,)
 
         delta_last = attendees[events] * (hours == T - 1)  # (k,)
@@ -484,7 +486,7 @@ def fast_neighbourhood(
         if k == 0:
             sampled = []
         else:
-            sampled = np.random.choice(k, size=int(max(1, sampling_rate*k)))
+            sampled = np.random.choice(k, size=int(max(1, sampling_rate * k)))
         scheduled_sampled = scheduled_events[sampled]
         # All conditions
         events, timeslots, rooms = (
@@ -502,7 +504,7 @@ def fast_neighbourhood(
         # Slow
         contributions = np.where(
             day_busy[days, :] == 2, 1, np.where(day_busy[days, :] == 1, -1, 0)
-        ) # (k, s)
+        )  # (k, s)
         delta_single = np.einsum("ij,ji->i", contributions, attending)  # (k,)
 
         delta_last = -attendees[events] * (hours == T - 1)  # (k,)
@@ -529,7 +531,7 @@ def fast_neighbourhood(
         if k == 0:
             sampled = []
         else:
-            sampled = np.random.choice(k, size=int(max(1, sampling_rate*k)))
+            sampled = np.random.choice(k, size=int(max(1, sampling_rate * k)))
         e1 = scheduled_events[i[sampled]]  # Shape: (k,)
         e2 = scheduled_events[j[sampled]]  # Shape: (k,)
         ts1, r1 = solution[e1, 0], solution[e1, 1]  # (k,)
@@ -546,7 +548,7 @@ def fast_neighbourhood(
             ts2[valid_swap],
             r1[valid_swap],
             r2[valid_swap],
-        ) # (k',)
+        )  # (k',)
 
         # Condition 4
         room_ok_e1_in_r2 = room_satisfies_event[r2, e1]  # (k',)
@@ -559,14 +561,14 @@ def fast_neighbourhood(
             ts2[valid_swap],
             r1[valid_swap],
             r2[valid_swap],
-        ) # (k'',)
+        )  # (k'',)
 
         # Condition 5
         e1_pred_ok = ts2 > max_pred_ts[e1]  # (k'',)
         e1_succ_ok = ts2 < min_succ_ts[e1]  # (k'',)
         e2_pred_ok = ts1 > max_pred_ts[e2]  # (k'',)
         e2_succ_ok = ts1 < min_succ_ts[e2]  # (k'',)
-        e1_e2_ok = ~(before[e1, e2] | before[e2, e1]) # (k'',)
+        e1_e2_ok = ~(before[e1, e2] | before[e2, e1])  # (k'',)
         valid_swap = e1_pred_ok & e1_succ_ok & e2_pred_ok & e2_succ_ok & e1_e2_ok
         e1, e2, ts1, ts2, r1, r2 = (
             e1[valid_swap],
@@ -575,7 +577,7 @@ def fast_neighbourhood(
             ts2[valid_swap],
             r1[valid_swap],
             r2[valid_swap],
-        ) # (k''',)
+        )  # (k''',)
 
         # Condition 1
         # Slow
@@ -593,7 +595,7 @@ def fast_neighbourhood(
             ts2[valid_swap],
             r1[valid_swap],
             r2[valid_swap],
-        ) # (k_valid,)
+        )  # (k_valid,)
 
         k_valid = len(e1)
 
@@ -609,7 +611,7 @@ def fast_neighbourhood(
 
         # Slow
         delta_single = (
-            - np.sum((day_busy[days_ts1, :] == 1) & attending_e1_only, axis=1)
+            -np.sum((day_busy[days_ts1, :] == 1) & attending_e1_only, axis=1)
             + np.sum((day_busy[days_ts1, :] == 2) & attending_e1_only, axis=1)
             + np.sum((day_busy[days_ts2, :] == 0) & attending_e1_only, axis=1)
             - np.sum((day_busy[days_ts2, :] == 1) & attending_e1_only, axis=1)
@@ -617,7 +619,7 @@ def fast_neighbourhood(
             - np.sum((day_busy[days_ts1, :] == 1) & attending_e2_only, axis=1)
             - np.sum((day_busy[days_ts2, :] == 1) & attending_e2_only, axis=1)
             + np.sum((day_busy[days_ts2, :] == 2) & attending_e2_only, axis=1)
-        ) # (k,)
+        )  # (k,)
 
         delta_last_e1 = attendees[e1] * (
             (hours_ts2 == T - 1).astype(np.int8) - (hours_ts1 == T - 1).astype(np.int8)

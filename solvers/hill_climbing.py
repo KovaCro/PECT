@@ -6,7 +6,6 @@ Solves PECT problem using hill climbing
 
 from typing import Literal
 import numpy as np
-from tqdm import tqdm
 from pect import Pectp, Pects, to_numpy, fast_neighbourhood
 from solvers import naive
 
@@ -23,7 +22,7 @@ def solve(
     Args:
         pect: PECT problem
         num_iter: number of iterations
-        tactic: 'best' chooses best neighbour each iteration, 'first' chooses first improving neighbour
+        tactic: 'best' chooses best neighbour, 'first' chooses first improving neighbour
         neighbourhood_type: 1 for insert/extract, 2 for swap between slotted
 
     Returns:
@@ -36,7 +35,7 @@ def solve(
 
     # TODO: neighbourhood type 2 should be implemented differently
 
-    for _ in tqdm(range(num_iter)):
+    for _ in range(num_iter):
         neighbourhood = None
         neighbour_ind = None
 
@@ -63,7 +62,8 @@ def solve(
 
         if tactic == "first":
             neighbour_ind = np.where(
-                (neighbourhood[:, 3] < 0) | ((neighbourhood[:, 3] == 0) & (neighbourhood[:, 4] < 0))
+                (neighbourhood[:, 3] < 0)
+                | ((neighbourhood[:, 3] == 0) & (neighbourhood[:, 4] < 0))
             )[0]
 
             if neighbour_ind.size == 0:
@@ -81,6 +81,7 @@ def solve(
             np_solution[neighbour[0]][1] = neighbour[2]
 
     return np_solution.tolist()
+
 
 def __call__(pect, **kwargs):
     return solve(pect, **kwargs)
