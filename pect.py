@@ -1,7 +1,7 @@
 """PECT definition and methods module."""
 
 import numpy as np
-from utils import consecutive_groups, find_duplicate_indices
+from utils import consecutive_groups, find_duplicate_indices, profile_lines
 
 # PECT problem
 type Pectp = tuple[
@@ -221,7 +221,7 @@ def to_numpy(pect: Pectp, solution: Pects) -> tuple:
         np.array(solution, dtype=np.int32),
     )
 
-
+@profile_lines('./neighbourhood.profile')
 def fast_neighbourhood(
     np_pect: any,
     np_solution: any,

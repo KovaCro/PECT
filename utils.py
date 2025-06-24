@@ -3,7 +3,10 @@
 import time
 import threading
 import functools
+import sys
+import io
 import os
+import line_profiler
 import psutil
 import matplotlib.pyplot as plt
 
@@ -131,4 +134,42 @@ def profile_performance():  # output_filename="performance_profile.png"):
 
         return wrapper
 
+    return decorator
+
+
+def profile_lines(output_file=None):
+    """
+    A decorator that profiles the execution speed of each line of the decorated function
+    using the line_profiler library.
+    """
+    def decorator(func):
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs):
+            lp = line_profiler.LineProfiler()
+
+            lp.add_function(func)
+
+            if output_file:
+                f = open(output_file, 'w', encoding='utf-8')
+                stream_for_profiler = f
+            else:
+                stream_for_profiler = sys.__stdout__
+
+            old_stdout = sys.stdout
+            new_stdout = io.StringIO()
+            sys.stdout = new_stdout
+
+            try:
+                lp.enable_by_count()
+                result = func(*args, **kwargs)
+                lp.disable_by_count()
+                lp.print_stats(stream=stream_for_profiler)
+
+            finally:
+                sys.stdout = old_stdout
+                print(new_stdout.getvalue(), end='')
+                if output_file:
+                    f.close()
+            return result
+        return wrapper
     return decorator
