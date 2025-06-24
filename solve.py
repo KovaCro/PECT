@@ -6,6 +6,12 @@ from concurrent.futures import ProcessPoolExecutor
 import inspect
 from tqdm import tqdm
 import pect
+from parsers import ProblemParser, SolutionParser, EvaluationParser, EvaluationCsvGenerator
+
+problem_parser = ProblemParser()
+solution_parser = SolutionParser()
+evaluation_parser = EvaluationParser()
+csv_generator = EvaluationCsvGenerator()
 
 
 def process_single_problem(
@@ -18,7 +24,7 @@ def process_single_problem(
 ) -> None:
     """ Helper function to process a single problem. """
     input_path = Path(input_path)
-    problem = pect.parse_problem(input_path)
+    problem = problem_parser.read(input_path)
     fails = []
     solution = solver(problem, **solver_kwargs)
     is_valid = pect.is_valid(problem, solution, fails)
@@ -27,11 +33,9 @@ def process_single_problem(
         print(fails)
     evaluation = pect.evaluate(problem, solution)
     output_path = output_dir / input_path.stem
-    pect.write_formatted_solution(
-        output_path.with_suffix(".formatted.sln"), problem, solution
-    )
-    pect.write_solution(output_path.with_suffix(".sln"), solution)
-    pect.write_evaluation(output_path.with_suffix(".eval"), evaluation)
+    solution_parser.write_formatted_solution(output_path.with_suffix(".formatted.sln"), problem, solution)
+    solution_parser.write(output_path.with_suffix(".sln"), solution)
+    evaluation_parser.write(output_path.with_suffix(".eval"), evaluation)
 
 
 def map_process(args, solver, solver_kwargs, solver_type, output_dir):
@@ -88,4 +92,4 @@ def generate_and_evaluate_solutions(
             )
         )
 
-    pect.generate_evaluation_csv(output_dir)
+    csv_generator.generate_evaluation_csv(output_dir)
