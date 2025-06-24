@@ -1,6 +1,7 @@
 """PECT parsers module."""
 
 from abc import ABC, abstractmethod
+from functools import lru_cache
 from pathlib import Path
 from typing import Any
 from pect import Pectp, Pects
@@ -42,6 +43,7 @@ class ProblemParser(Parser):
     Parser for `.tim` problem files.
     """
 
+    @lru_cache(maxsize=128)
     def read(self, path: Path) -> Pectp:
         """
         Parses a .tim file. Does not check if file is valid.
@@ -123,9 +125,30 @@ class SolutionParser(Parser):
     Parser for .sln solution files.
     """
 
+    @lru_cache(maxsize=128)
+    def _read(self, path: Path, n: int) -> Pects:
+        """
+        Internal cached method.
+
+        Args:
+            path: Path to the .sln file.
+            pect: PECT problem
+
+        Returns:
+            PECT solution
+        """
+
+        solution = []
+        with open(path, "r", encoding="utf-8") as file:
+            for _ in range(n):
+                line = file.readline().split(" ")
+                solution.append([int(line[0]), int(line[1])])
+        return solution
+    
     def read(self, path: Path, pect: Pectp) -> Pects:
         """
         Reads solution from a .sln file
+        Uses cached internal method.
 
         Args:
             path: Path to the .sln file.
@@ -136,11 +159,7 @@ class SolutionParser(Parser):
         """
 
         n = pect[0]
-        solution = []
-        with open(path, "r", encoding="utf-8") as file:
-            for _ in range(n):
-                line = file.readline().split(" ")
-                solution.append([int(line[0]), int(line[1])])
+        solution = self._read(path, n)
         return solution
 
     def write(self, path: Path, data: Pects) -> None:
@@ -205,6 +224,7 @@ class EvaluationParser(Parser):
     Parser for evaluation files.
     """
 
+    @lru_cache(maxsize=128)
     def read(self, path: Path) -> tuple[str, int, int, int]:
         """
         Reads a formatted evaluation from file
