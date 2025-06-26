@@ -129,6 +129,7 @@ def profile_performance():  # output_filename="performance_profile.png"):
             lines2, labels2 = ax2.get_legend_handles_labels()
             ax2.legend(lines + lines2, labels + labels2, loc="upper left")
             plt.tight_layout()
+            plt.show()
 
             return result
 

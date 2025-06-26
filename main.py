@@ -5,6 +5,7 @@ from pathlib import Path
 from solve import generate_and_evaluate_solutions
 from solvers import hill_climbing, greedy, naive, tabu_search
 from pect import Pectp, Pects
+from utils import profile_performance
 
 
 def get_accessible_solver(name: str) -> Callable[[Pectp], Pects]:
@@ -18,7 +19,7 @@ def get_accessible_solver(name: str) -> Callable[[Pectp], Pects]:
     if name == "tabu_search":
         return tabu_search.solve
 
-
+@profile_performance()
 def main():
     """
     This script parses command-line arguments, generates and evaluates 
